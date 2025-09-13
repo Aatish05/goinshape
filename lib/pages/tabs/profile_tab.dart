@@ -49,24 +49,23 @@ class _ProfileTabState extends State<ProfileTab> {
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-        FilledButton.icon(
-        onPressed: () async {
-        final changed = await Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => ProfileSetupPage(userId: widget.userId)),
-        );
-        if (changed == true && mounted) {
-        await _load(); // pull fresh user+profile back into the tab
-        }
-        },
-        icon: const Icon(Icons.edit),
-        label: const Text('Edit'),
-        ),
+          FilledButton.icon(
+            onPressed: () async {
+              final changed = await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => ProfileSetupPage(userId: widget.userId)),
+              );
+              if (changed == true && mounted) {
+                await _load(); // pull fresh user+profile back into the tab
+              }
+            },
+            icon: const Icon(Icons.edit),
+            label: const Text('Edit'),
+          ),
         ],
       ),
     );
   }
-
 
   Future<void> _load() async {
     final db = AppDatabase.instance;
@@ -111,13 +110,15 @@ class _ProfileTabState extends State<ProfileTab> {
     final email = (_user?['email'] as String?) ?? '';
     final p = _profile;
 
+    // NEW: computed weekly target for the extra stat card
+    final int weeklyTarget = _dailyTarget > 0 ? _dailyTarget * 7 : 0;
+
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 560),
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            // Header card with avatar
             // Header card with avatar (adaptive layout)
             Container(
               decoration: BoxDecoration(
@@ -160,17 +161,14 @@ class _ProfileTabState extends State<ProfileTab> {
                             Text(
                               name,
                               softWrap: true,
-                              // no maxLines / overflow -> full name shows
                               style: Theme.of(context)
                                   .textTheme
                                   .titleLarge
                                   ?.copyWith(fontWeight: FontWeight.w800),
                             ),
                             const SizedBox(height: 4),
-                            // You can keep SelectableText or use Text. Both wrap when not limited.
                             SelectableText(
                               email,
-                              // no maxLines -> can wrap to multiple lines
                               style: Theme.of(context)
                                   .textTheme
                                   .bodyMedium
@@ -215,17 +213,17 @@ class _ProfileTabState extends State<ProfileTab> {
               ),
             ),
 
-
             const SizedBox(height: 16),
 
-            // Quick stats
+            // Quick stats (added Weekly target)
             Wrap(
               spacing: 12,
               runSpacing: 12,
               children: [
                 _statCard(context, Icons.local_fire_department, 'Daily target',
                     _dailyTarget > 0 ? '$_dailyTarget kcal' : '—'),
-                _statCard(context, Icons.flag, 'Goal', (p?['goal'] as String?) ?? '—'),
+                _statCard(context, Icons.flag, 'Goal',
+                    (p?['goal'] as String?) ?? '—'),
                 _statCard(
                   context,
                   Icons.speed,
@@ -233,6 +231,13 @@ class _ProfileTabState extends State<ProfileTab> {
                   (p?['target_rate_kg_per_week'] == null)
                       ? '—'
                       : '${(p!['target_rate_kg_per_week'] as num).toString()} kg',
+                ),
+                // NEW: weekly target card
+                _statCard(
+                  context,
+                  Icons.calendar_month,
+                  'Weekly target',
+                  weeklyTarget > 0 ? '$weeklyTarget kcal' : '—',
                 ),
               ],
             ),
@@ -246,8 +251,10 @@ class _ProfileTabState extends State<ProfileTab> {
                 children: [
                   _row('Sex', (p?['sex'] as String?) ?? '—'),
                   _row('Age', (p?['age']?.toString()) ?? '—'),
-                  _row('Height', (p?['height_cm'] == null) ? '—' : '${p!['height_cm']} cm'),
-                  _row('Weight', (p?['weight_kg'] == null) ? '—' : '${(p!['weight_kg'] as num).toString()} kg'),
+                  _row('Height',
+                      (p?['height_cm'] == null) ? '—' : '${p!['height_cm']} cm'),
+                  _row('Weight',
+                      (p?['weight_kg'] == null) ? '—' : '${(p!['weight_kg'] as num).toString()} kg'),
                   SwitchListTile(
                     title: const Text('Sedentary activity notification'),
                     subtitle: const Text('Sedentary Activity Alert Notification.'),
@@ -263,7 +270,6 @@ class _ProfileTabState extends State<ProfileTab> {
             // Sign out
             FilledButton.tonalIcon(
               onPressed: () {
-                // Navigate back to login and clear history
                 Navigator.of(context).pushAndRemoveUntil(
                   MaterialPageRoute(builder: (_) => const LoginPage()),
                       (route) => false,
@@ -286,7 +292,13 @@ class _ProfileTabState extends State<ProfileTab> {
         color: Theme.of(ctx).colorScheme.surface,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: Theme.of(ctx).dividerColor.withOpacity(.25)),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(.04), blurRadius: 10, offset: const Offset(0, 4))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          )
+        ],
       ),
       child: Row(
         children: [
@@ -300,8 +312,16 @@ class _ProfileTabState extends State<ProfileTab> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(t, style: Theme.of(ctx).textTheme.labelMedium?.copyWith(color: Colors.black54)),
-                Text(v, style: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                Text(t,
+                    style: Theme.of(ctx)
+                        .textTheme
+                        .labelMedium
+                        ?.copyWith(color: Colors.black54)),
+                Text(v,
+                    style: Theme.of(ctx)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w800)),
               ],
             ),
           ),
