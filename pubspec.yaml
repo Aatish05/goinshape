@@ -1,0 +1,25 @@
+name: goinshape
+description: A simple calorie tracker with weekly and profile goals.
+publish_to: "none"
+
+environment:
+ sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+ flutter:
+  sdk: flutter
+ cupertino_icons: ^1.0.8
+ path_provider: ^2.1.2
+ sqflite: ^2.3.3+1
+ sqflite_common_ffi: ^2.3.2
+ shared_preferences: ^2.2.3
+ intl: ^0.19.0
+ sqflite_common_ffi_web: ^1.0.1+1
+
+dev_dependencies:
+ flutter_test:
+  sdk: flutter
+ flutter_lints: ^4.0.0
+
+flutter:
+ uses-material-design: true
