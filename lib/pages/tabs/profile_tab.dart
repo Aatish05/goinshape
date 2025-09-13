@@ -144,12 +144,13 @@ class _ProfileTabState extends State<ProfileTab> {
                   _row('Height', (p?['height_cm'] == null) ? '—' : '${p!['height_cm']} cm'),
                   _row('Weight', (p?['weight_kg'] == null) ? '—' : '${(p!['weight_kg'] as num).toString()} kg'),
                   SwitchListTile(
-                    title: const Text('Sedentary notification'),
-                    value: ((p?['sedentary_notify'] as int?) ?? 0) == 1,
-                    onChanged: (v) async {
-                      await AppDatabase.instance.setSedentaryNotify(widget.userId, v);
-                      if (mounted) _load();
-                    },
+                  title: const Text('Sedentary activity notification'),
+                  subtitle: const Text('Notification for following sedentary activity.'),
+                  value: _mockSedentary,
+                  onChanged: (v) {
+                  setState(() => _mockSedentary = v); // local UI change only
+                  // no DB calls, no recompute
+                  },
                   ),
                 ],
               ),
@@ -198,3 +199,6 @@ class _ProfileTabState extends State<ProfileTab> {
     trailing: Text(v, style: const TextStyle(fontWeight: FontWeight.w700)),
   );
 }
+
+bool _mockSedentary = false; // visual only, no persistence
+
