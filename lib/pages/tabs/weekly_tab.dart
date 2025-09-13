@@ -140,7 +140,7 @@ class _WeeklyTabState extends State<WeeklyTab> {
                     children: const [
                       Icon(Icons.info_outline, size: 14, color: Colors.amber),
                       SizedBox(width: 6),
-                      Text('Red line = exceeding intake target',
+                      Text('Red line = exceeding target',
                           style: TextStyle(
                               fontSize: 12, fontWeight: FontWeight.w900)),
                     ],

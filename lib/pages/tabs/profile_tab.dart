@@ -1,7 +1,9 @@
+// lib/pages/tabs/profile_tab.dart
 import 'package:flutter/material.dart';
 import '../../services/db.dart';
 import '../../services/targets.dart';
 import '../profile_setup_page.dart';
+import '../auth/login_page.dart';
 
 class ProfileTab extends StatefulWidget {
   final int userId;
@@ -16,11 +18,55 @@ class _ProfileTabState extends State<ProfileTab> {
   Map<String, Object?>? _profile;
   int _dailyTarget = 0;
 
+  // Visual-only switch state (does not persist)
+  bool _mockSedentary = false;
+
   @override
   void initState() {
     super.initState();
     _load();
   }
+
+  Future<void> _editNameDialog() async {
+    final ctrl = TextEditingController(text: (_user?['name'] as String?) ?? '');
+    final formKey = GlobalKey<FormState>();
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Edit name'),
+        content: Form(
+          key: formKey,
+          child: TextFormField(
+            controller: ctrl,
+            autofocus: true,
+            textInputAction: TextInputAction.done,
+            decoration: const InputDecoration(hintText: 'Enter your name'),
+            validator: (v) =>
+            (v == null || v.trim().isEmpty) ? 'Name is required' : null,
+            onFieldSubmitted: (_) => Navigator.pop(ctx), // optional
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+        FilledButton.icon(
+        onPressed: () async {
+        final changed = await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => ProfileSetupPage(userId: widget.userId)),
+        );
+        if (changed == true && mounted) {
+        await _load(); // pull fresh user+profile back into the tab
+        }
+        },
+        icon: const Icon(Icons.edit),
+        label: const Text('Edit'),
+        ),
+        ],
+      ),
+    );
+  }
+
 
   Future<void> _load() async {
     final db = AppDatabase.instance;
@@ -44,6 +90,7 @@ class _ProfileTabState extends State<ProfileTab> {
       _user = u;
       _profile = p;
       _dailyTarget = daily;
+      _mockSedentary = ((p?['sedentary_notify'] as int?) ?? 0) == 1; // visual only
     });
   }
 
@@ -51,8 +98,11 @@ class _ProfileTabState extends State<ProfileTab> {
     final n = (name ?? '').trim();
     if (n.isEmpty) return 'U';
     final parts = n.split(RegExp(r'\s+'));
-    if (parts.length == 1) return parts.first.characters.take(2).toString().toUpperCase();
-    return (parts.first.characters.first + parts.last.characters.first).toUpperCase();
+    final first = parts.isNotEmpty ? parts.first : '';
+    final last = parts.length > 1 ? parts.last : '';
+    final a = first.isNotEmpty ? first[0] : '';
+    final b = last.isNotEmpty ? last[0] : (first.length > 1 ? first[1] : '');
+    return (a + b).toUpperCase();
   }
 
   @override
@@ -68,6 +118,7 @@ class _ProfileTabState extends State<ProfileTab> {
           padding: const EdgeInsets.all(16),
           children: [
             // Header card with avatar
+            // Header card with avatar (adaptive layout)
             Container(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
@@ -75,60 +126,114 @@ class _ProfileTabState extends State<ProfileTab> {
                     Theme.of(context).colorScheme.primary.withOpacity(.10),
                     Theme.of(context).colorScheme.primary.withOpacity(.04),
                   ],
-                  begin: Alignment.topLeft, end: Alignment.bottomRight,
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
                 borderRadius: BorderRadius.circular(24),
                 border: Border.all(color: Theme.of(context).dividerColor.withOpacity(.35)),
               ),
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 34,
-                    backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(.15),
-                    child: Text(
-                      _initials(name),
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.primary,
-                        fontWeight: FontWeight.w800, fontSize: 22,
+              child: LayoutBuilder(
+                builder: (ctx, cons) {
+                  final narrow = cons.maxWidth < 400; // phone width -> use icon only
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      CircleAvatar(
+                        radius: 34,
+                        backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(.15),
+                        child: Text(
+                          _initials(name),
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.primary,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 22,
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(name, style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
-                        const SizedBox(height: 4),
-                        Text(email, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.black54)),
-                      ],
-                    ),
-                  ),
-                  FilledButton.icon(
-                    onPressed: () async {
-                      await Navigator.push(context, MaterialPageRoute(
-                        builder: (_) => ProfileSetupPage(userId: widget.userId),
-                      ));
-                      if (mounted) _load();
-                    },
-                    icon: const Icon(Icons.edit),
-                    label: const Text('Edit'),
-                  )
-                ],
+                      const SizedBox(width: 16),
+                      // Let text take as much room as needed and wrap
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              name,
+                              softWrap: true,
+                              // no maxLines / overflow -> full name shows
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleLarge
+                                  ?.copyWith(fontWeight: FontWeight.w800),
+                            ),
+                            const SizedBox(height: 4),
+                            // You can keep SelectableText or use Text. Both wrap when not limited.
+                            SelectableText(
+                              email,
+                              // no maxLines -> can wrap to multiple lines
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(color: Colors.black54),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // Adaptive action: icon on narrow, full button on wide
+                      if (narrow)
+                        IconButton.filledTonal(
+                          icon: const Icon(Icons.edit),
+                          tooltip: 'Edit',
+                          onPressed: () async {
+                            final changed = await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => ProfileSetupPage(userId: widget.userId),
+                              ),
+                            );
+                            if (changed == true && mounted) _load();
+                          },
+                        )
+                      else
+                        FilledButton.icon(
+                          onPressed: () async {
+                            final changed = await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => ProfileSetupPage(userId: widget.userId),
+                              ),
+                            );
+                            if (changed == true && mounted) _load();
+                          },
+                          icon: const Icon(Icons.edit),
+                          label: const Text('Edit'),
+                        ),
+                    ],
+                  );
+                },
               ),
             ),
+
 
             const SizedBox(height: 16),
 
             // Quick stats
             Wrap(
-              spacing: 12, runSpacing: 12,
+              spacing: 12,
+              runSpacing: 12,
               children: [
-                _statCard(context, Icons.local_fire_department, 'Daily target', _dailyTarget > 0 ? '$_dailyTarget kcal' : '—'),
+                _statCard(context, Icons.local_fire_department, 'Daily target',
+                    _dailyTarget > 0 ? '$_dailyTarget kcal' : '—'),
                 _statCard(context, Icons.flag, 'Goal', (p?['goal'] as String?) ?? '—'),
-                _statCard(context, Icons.speed, 'Rate / wk',
-                    (p?['target_rate_kg_per_week'] == null) ? '—' : '${(p!['target_rate_kg_per_week'] as num).toString()} kg'),
+                _statCard(
+                  context,
+                  Icons.speed,
+                  'Rate / wk',
+                  (p?['target_rate_kg_per_week'] == null)
+                      ? '—'
+                      : '${(p!['target_rate_kg_per_week'] as num).toString()} kg',
+                ),
               ],
             ),
 
@@ -144,16 +249,28 @@ class _ProfileTabState extends State<ProfileTab> {
                   _row('Height', (p?['height_cm'] == null) ? '—' : '${p!['height_cm']} cm'),
                   _row('Weight', (p?['weight_kg'] == null) ? '—' : '${(p!['weight_kg'] as num).toString()} kg'),
                   SwitchListTile(
-                  title: const Text('Sedentary activity notification'),
-                  subtitle: const Text('Notification for following sedentary activity.'),
-                  value: _mockSedentary,
-                  onChanged: (v) {
-                  setState(() => _mockSedentary = v); // local UI change only
-                  // no DB calls, no recompute
-                  },
+                    title: const Text('Sedentary activity notification'),
+                    subtitle: const Text('Sedentary Activity Alert Notification.'),
+                    value: _mockSedentary,
+                    onChanged: (v) => setState(() => _mockSedentary = v), // local UI only
                   ),
                 ],
               ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // Sign out
+            FilledButton.tonalIcon(
+              onPressed: () {
+                // Navigate back to login and clear history
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const LoginPage()),
+                      (route) => false,
+                );
+              },
+              icon: const Icon(Icons.logout),
+              label: const Text('Sign out'),
             ),
           ],
         ),
@@ -199,6 +316,3 @@ class _ProfileTabState extends State<ProfileTab> {
     trailing: Text(v, style: const TextStyle(fontWeight: FontWeight.w700)),
   );
 }
-
-bool _mockSedentary = false; // visual only, no persistence
-

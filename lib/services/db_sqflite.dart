@@ -9,6 +9,7 @@ class AppDatabase {
 
   Database? _db;
 
+
   Future<String> _resolvePath() async {
     final dir = await getDatabasesPath();
     return p.join(dir, 'goinshape.db');
@@ -64,6 +65,8 @@ class AppDatabase {
   }
 
   Database get db => _db!;
+
+
 
   Future<void> deleteDatabaseFile() async {
     final path = await _resolvePath();
