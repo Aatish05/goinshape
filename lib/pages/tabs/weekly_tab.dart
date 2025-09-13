@@ -1,5 +1,7 @@
+// lib/pages/tabs/weekly_tab.dart
 import 'package:flutter/material.dart';
 import '../../services/db.dart';
+import '../../services/targets.dart';
 
 class WeeklyTab extends StatefulWidget {
   final int userId;
@@ -11,44 +13,7 @@ class WeeklyTab extends StatefulWidget {
 
 class _WeeklyTabState extends State<WeeklyTab> {
   Map<DateTime, int> _data = {};
-  int _dailyTarget = 2000;
-  bool _loading = true;
-
-  int _computeDailyTarget(Map<String, Object?>? p) {
-    final age = (p?['age'] as num?)?.toInt() ?? 25;
-    final h = (p?['height_cm'] as num?)?.toInt() ?? 170;
-    final w = (p?['weight_kg'] as num?)?.toDouble() ?? 70.0;
-    final sex = (p?['sex'] as String? ?? 'male');
-    final goal = (p?['goal'] as String? ?? 'maintain');
-    final rate = (p?['target_rate_kg_per_week'] as num?)?.toDouble() ?? 0.0;
-
-    final bmr = sex == 'male'
-        ? 10 * w + 6.25 * h - 5 * age + 5
-        : 10 * w + 6.25 * h - 5 * age - 161;
-    double tdee = bmr * 1.3;
-
-    if (rate != 0) {
-      tdee += 7700.0 * rate / 7.0;
-    } else {
-      if (goal == 'lose') tdee -= 450;
-      if (goal == 'gain') tdee += 300;
-    }
-    final t = tdee.round();
-    if (t < 900) return 900;
-    if (t > 5000) return 5000;
-    return t;
-  }
-
-  Future<void> _load() async {
-    final totals = await AppDatabase.instance.last7Totals(widget.userId, DateTime.now());
-    final profile = await AppDatabase.instance.getProfile(widget.userId);
-    if (!mounted) return;
-    setState(() {
-      _data = totals;
-      _dailyTarget = _computeDailyTarget(profile);
-      _loading = false;
-    });
-  }
+  int _dailyTarget = 0;
 
   @override
   void initState() {
@@ -56,116 +21,203 @@ class _WeeklyTabState extends State<WeeklyTab> {
     _load();
   }
 
-  String _fmt(DateTime d) => '${d.day.toString().padLeft(2,'0')}/${d.month.toString().padLeft(2,'0')}';
+  Future<void> _load() async {
+    final db = AppDatabase.instance;
+
+    // compute daily target from profile
+    final p = await db.getProfile(widget.userId);
+    int daily = 0;
+    if (p != null) {
+      final sex = (p['sex'] as String?) ?? 'male';
+      final age = (p['age'] as int?) ?? 25;
+      final h = (p['height_cm'] as int?) ?? 170;
+      final w = (p['weight_kg'] as num?)?.toDouble() ?? 70.0;
+      final goal = (p['goal'] as String?) ?? 'maintain';
+      final rate = (p['target_rate_kg_per_week'] as num?)?.toDouble() ?? 0.0;
+      final sedentary = ((p['sedentary_notify'] as int?) ?? 0) == 1;
+
+      daily = computeDailyTarget(
+        sex: sex,
+        age: age,
+        heightCm: h,
+        weightKg: w,
+        goal: goal,
+        ratePerWeek: rate,
+        sedentary: sedentary,
+      ).round();
+    }
+
+    final map = await db.last7Totals(widget.userId, DateTime.now());
+    setState(() {
+      _dailyTarget = daily;
+      _data = map;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const Center(child: CircularProgressIndicator());
-
     final weeklyTarget = _dailyTarget * 7;
-    final consumed = _data.values.fold<int>(0, (s, v) => s + v);
-    final remaining = weeklyTarget - consumed;
-    final overWeek = remaining < 0;
+    final weeklyTotal = _data.values.fold<int>(0, (a, b) => a + b);
+    final remaining = weeklyTarget - weeklyTotal;
+    final over = remaining < 0;
 
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        Text('This week', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w800)),
-        const SizedBox(height: 10),
-
-        LayoutBuilder(
-          builder: (context, cons) {
-            final narrow = cons.maxWidth < 560;
-            final cards = [
-              _statCard(context, 'Weekly target', '$weeklyTarget kcal', Icons.flag_outlined),
-              _statCard(context, 'Consumed', '$consumed kcal', Icons.local_fire_department_outlined),
-              _statCard(
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Wrap(
+            runSpacing: 8,
+            spacing: 8,
+            children: [
+              _chip(context, Icons.flag, 'Weekly target $weeklyTarget'),
+              _chip(context, Icons.local_fire_department, 'This week $weeklyTotal'),
+              _chip(
                 context,
-                overWeek ? 'Over this week' : 'Remaining this week',
-                '${remaining.abs()} kcal',
-                overWeek ? Icons.warning_amber_rounded : Icons.check_circle_outline,
-                color: overWeek ? Colors.red.withOpacity(.10) : Colors.green.withOpacity(.10),
-                iconColor: overWeek ? Colors.red : Colors.green,
+                over ? Icons.warning_amber : Icons.check_circle,
+                over ? 'Over by ${-remaining}' : 'Remaining $remaining',
               ),
-            ];
-            if (narrow) {
-              return Column(
-                children: [
-                  cards[0],
-                  const SizedBox(height: 8),
-                  cards[1],
-                  const SizedBox(height: 8),
-                  cards[2],
-                ],
-              );
-            } else {
-              return Row(
-                children: [
-                  Expanded(child: cards[0]),
-                  const SizedBox(width: 10),
-                  Expanded(child: cards[1]),
-                  const SizedBox(width: 10),
-                  Expanded(child: cards[2]),
-                ],
-              );
-            }
-          },
-        ),
-
-        const SizedBox(height: 16),
-        Text('Last 7 days', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-        const SizedBox(height: 8),
-
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minWidth: 420),
-            child: DataTable(
-              columns: const [
-                DataColumn(label: Text('Date')),
-                DataColumn(label: Text('Consumed')),
-                DataColumn(label: Text('Daily target')),
-                DataColumn(label: Text('Status')),
-              ],
-              rows: _data.entries.map((e) {
-                final c = e.value;
-                final over = c > _dailyTarget;
-                final status = over ? 'Over by ${c - _dailyTarget}' : 'Remaining ${_dailyTarget - c}';
-                return DataRow(cells: [
-                  DataCell(Text(_fmt(e.key))),
-                  DataCell(Text('$c kcal')),
-                  DataCell(Text('$_dailyTarget kcal')),
-                  DataCell(Text(status, style: TextStyle(color: over ? Colors.red : Colors.green))),
-                ]);
-              }).toList(),
-            ),
+            ],
           ),
-        ),
-      ],
+          const SizedBox(height: 12),
+          _BarChart(data: _data, dailyTarget: _dailyTarget),
+          const SizedBox(height: 12),
+          _table(),
+        ],
+      ),
     );
   }
 
-  Widget _statCard(BuildContext context, String title, String value, IconData icon,
-      {Color? color, Color? iconColor}) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: color ?? Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(.05), blurRadius: 10, offset: const Offset(0, 6))],
+  Widget _chip(BuildContext ctx, IconData icon, String label) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+    decoration: BoxDecoration(
+      color: Theme.of(ctx).colorScheme.primary.withOpacity(.08),
+      borderRadius: BorderRadius.circular(24),
+    ),
+    child: Row(mainAxisSize: MainAxisSize.min, children: [
+      Icon(icon, size: 18, color: Theme.of(ctx).colorScheme.primary),
+      const SizedBox(width: 6),
+      Text(
+        label,
+        style: Theme.of(ctx)
+            .textTheme
+            .labelLarge
+            ?.copyWith(color: Theme.of(ctx).colorScheme.primary, fontWeight: FontWeight.w600),
       ),
-      child: Row(
-        children: [
-          Icon(icon, color: iconColor ?? Theme.of(context).colorScheme.primary),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-              const SizedBox(height: 4),
-              Text(value, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-            ]),
+    ]),
+  );
+
+  Widget _table() {
+    if (_data.isEmpty) return const SizedBox.shrink();
+    final rows = _data.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
+    String _label(DateTime d) => '${d.month.toString().padLeft(2, '0')}/${d.day.toString().padLeft(2, '0')}';
+
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Column(
+        children: rows
+            .map(
+              (e) => ListTile(
+            dense: true,
+            title: Text(_label(e.key)),
+            trailing: Text('${e.value} kcal', style: const TextStyle(fontWeight: FontWeight.w700)),
           ),
-        ],
+        )
+            .toList(),
+      ),
+    );
+  }
+}
+
+class _BarChart extends StatelessWidget {
+  final Map<DateTime, int> data;
+  final int dailyTarget;
+  const _BarChart({required this.data, required this.dailyTarget});
+
+  @override
+  Widget build(BuildContext context) {
+    if (data.isEmpty) {
+      return const Center(
+        child: Padding(padding: EdgeInsets.all(24), child: Text('No data for last 7 days')),
+      );
+    }
+
+    final items = data.entries.toList()..sort((a, b) => a.key.compareTo(b.key));
+
+    // ensure maxVal >= 1.0 to avoid division by zero and NaN positions
+    double maxVal = [
+      dailyTarget.toDouble(),
+      ...items.map((e) => e.value.toDouble()),
+    ].reduce((a, b) => a > b ? a : b);
+    if (maxVal <= 0) maxVal = 1.0;
+
+    // Fixed overall chart height and reserved space for labels to prevent overflow
+    const double chartHeight = 220.0;
+    const double topPad = 10.0;       // space before target line area
+    const double labelReserve = 22.0; // reserved under each bar for the day label
+    final double maxBarHeight = (chartHeight - topPad - labelReserve).clamp(0.0, chartHeight);
+
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+        child: SizedBox(
+          height: chartHeight,
+          child: LayoutBuilder(
+            builder: (ctx, c) {
+              final double barWidth = (c.maxWidth - 20.0) / (items.length * 1.6);
+              final double targetY = topPad + (1.0 - (dailyTarget / maxVal)) * maxBarHeight;
+
+              return Stack(
+                children: [
+                  // Target line
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    top: targetY.isFinite ? targetY : topPad,
+                    child: Container(
+                      height: 2,
+                      color: Theme.of(ctx).colorScheme.primary.withOpacity(.3),
+                    ),
+                  ),
+
+                  // Bars + labels
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: items.map((e) {
+                      final double h = ((e.value / maxVal) * maxBarHeight).clamp(0.0, maxBarHeight);
+                      final String lbl = '${e.key.month}/${e.key.day}';
+                      final bool over = e.value > dailyTarget;
+
+                      return Column(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          // Bar
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 250),
+                            width: barWidth,
+                            height: h.isFinite ? h : 0.0,
+                            decoration: BoxDecoration(
+                              color: over ? Colors.red : Theme.of(ctx).colorScheme.primary,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          // Fixed label area prevents any overflow in tight layouts
+                          SizedBox(
+                            height: labelReserve,
+                            child: Text(lbl, style: Theme.of(ctx).textTheme.labelSmall),
+                          ),
+                        ],
+                      );
+                    }).toList(),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
       ),
     );
   }
