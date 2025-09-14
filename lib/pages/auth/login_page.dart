@@ -29,7 +29,9 @@ class _LoginPageState extends State<LoginPage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('Log in', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800)),
+                const Text('GoInShape', style: TextStyle(fontSize: 38, color:Colors.blue, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 66),
+                const Text('Log in', style: TextStyle(fontSize: 28,color:Colors.blueAccent, fontWeight: FontWeight.w800)),
                 const SizedBox(height: 16),
                 TextField(controller: _email, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Email')),
                 const SizedBox(height: 12),

@@ -16,15 +16,21 @@ class _RegisterPageState extends State<RegisterPage> {
 
   @override
   Widget build(BuildContext context) {
+
     return Scaffold(
       appBar: AppBar(),
       body: Center(
+
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 420),
           child: Padding(
+
+
             padding: const EdgeInsets.all(24),
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-              const Text('Create account', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800)),
+              const Text('GoInShape', style: TextStyle(fontSize: 38, color:Colors.blue, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 66),
+              const Text('Create account', style: TextStyle(fontSize: 28,color:Colors.teal, fontWeight: FontWeight.w800)),
               const SizedBox(height: 16),
               TextField(controller: _name, decoration: const InputDecoration(labelText: 'Name')),
               const SizedBox(height: 12),
